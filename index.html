@@ -29,6 +29,13 @@
       }
     };
   </script>
+
+  <!-- Markdown + Highlighting + Sanitization -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+
   <style>
     .fade-in { animation: fade .25s ease both; }
     @keyframes fade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
@@ -116,30 +123,35 @@
       const errorBar = document.getElementById('errorBar');
       const clearBtn = document.getElementById('clearChatBtn');
 
+      // Configure marked + highlight.js
+      marked.setOptions({
+        gfm: true,
+        breaks: true,      // single newlines -> <br>
+        headerIds: false,
+        mangle: false,
+        highlight: function(code, lang) {
+          try {
+            const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+            return hljs.highlight(code, { language }).value;
+          } catch (e) {
+            return hljs.highlight(code, { language: 'plaintext' }).value;
+          }
+        }
+      });
+
+      // Render Markdown safely
+      function renderMarkdown(text){
+        const html = marked.parse(text || '');
+        // Sanitize rendered HTML to prevent XSS from model/user content
+        const safe = DOMPurify.sanitize(html, {
+          RETURN_TRUSTED_TYPE: false
+        });
+        return safe;
+      }
+
       // autosize textarea
       function autosize(){ input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; }
       input.addEventListener('input', autosize); autosize();
-
-      // basic markdown-ish rendering
-      function renderText(s){
-        // ```code``` blocks
-        s = s.replace(/```([\s\S]*?)```/g, (_, code) => '<pre>'+escapeHtml(code.trim())+'</pre>');
-        // inline `code`
-        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-        // simple bullets
-        s = s.replace(/\n-\s/g, '\n• ');
-        // paragraphs
-        return s.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g,'<br/>')}</p>`).join('');
-      }
-      function escapeHtml(str){
-        return str.replace(/[&<>"']/g, (m) => ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        })[m]);
-      }
 
       function scrollToBottom(){ chat.scrollTop = chat.scrollHeight; }
 
@@ -163,11 +175,11 @@
         return {row, bubble};
       }
 
-      function addMessage(role, html){
+      function addMessage(role, text){
         const {row, bubble} = messageRow(role);
         const inner = document.createElement('div');
         inner.setAttribute('data-html','');
-        inner.innerHTML = renderText(escapeHtml(html));
+        inner.innerHTML = renderMarkdown(text);
         bubble.appendChild(inner);
         chat.appendChild(row);
         return bubble;
@@ -203,7 +215,7 @@
           typing.bubble.innerHTML = '';
           const inner = document.createElement('div');
           inner.setAttribute('data-html','');
-          inner.innerHTML = renderText(escapeHtml(reply));
+          inner.innerHTML = renderMarkdown(reply);
           typing.bubble.appendChild(inner);
         } catch (err){
           typing.row.remove();
