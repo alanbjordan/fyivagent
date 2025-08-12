@@ -48,14 +48,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
   <script>
-  // Force all links to open in a new tab + be safe
-  DOMPurify.addHook('afterSanitizeAttributes', function(node) {
-    if (node.tagName && node.tagName.toLowerCase() === 'a') {
-      node.setAttribute('target', '_blank');
-      node.setAttribute('rel', 'noopener noreferrer');
-      node.classList.add('text-blue-600', 'hover:underline'); // Tailwind styling
-    }
-  });
+    // Force all links to open in a new tab + be safe + styled
+    DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+      if (node.tagName && node.tagName.toLowerCase() === 'a') {
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+        node.classList.add('text-blue-600', 'hover:underline');
+      }
+    });
   </script>
 
   <!-- =========================
@@ -84,14 +84,12 @@
     .nice-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.08); border-radius: 999px; }
     .nice-scroll::-webkit-scrollbar-track { background: transparent; }
 
-    /* Style bot message links */
+    /* Style bot message links (belt & suspenders with the hook) */
     .prose-like a {
-      color: #2563eb; /* Tailwind's blue-600 */
+      color: #2563eb; /* Tailwind blue-600 */
       text-decoration: underline;
     }
-    .prose-like a:hover {
-      color: #1d4ed8; /* Tailwind's blue-700 */
-    }
+    .prose-like a:hover { color: #1d4ed8; /* blue-700 */ }
   </style>
 </head>
 <body class="bg-brand-50 text-zinc-900 selection:bg-brand-200">
@@ -169,6 +167,24 @@
       const sendBtn = document.getElementById('send');
       const errorBar = document.getElementById('errorBar');
       const clearBtn = document.getElementById('clearChatBtn');
+
+      /* -------------------------
+         IDENTIFIERS
+         - FY_UID: stable across visits (localStorage)
+         - FY_SID: new each page load / reload (in-memory)
+      -------------------------- */
+      function uuidv4(){
+        return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+      }
+      function getFyUid(){
+        let id = localStorage.getItem('fy_uid');
+        if (!id) { id = `web_${uuidv4()}`; localStorage.setItem('fy_uid', id); }
+        return id;
+      }
+      const FY_UID = getFyUid();
+      let FY_SID = `sess_${uuidv4()}`; // regenerated on load and when clearing
 
       /* -------------------------
          MARKED + HLJS CONFIG
@@ -267,7 +283,8 @@
             body: JSON.stringify({
               role: 'user',
               message: text,
-              user_id: 'web_test_id',
+              user_id: FY_UID,     // stable across visits
+              session_id: FY_SID,  // new each load / on clear
               name: 'test_user_name'
             })
           });
@@ -295,9 +312,10 @@
       /* -------------------------
          EVENT HANDLERS
       -------------------------- */
-      // Clear chat
+      // Clear chat (also start a brand-new session)
       if (clearBtn) {
         clearBtn.addEventListener('click', ()=>{
+          FY_SID = `sess_${uuidv4()}`; // new session on clear
           chat.innerHTML = '';
           const welcomeRow = document.createElement('div');
           welcomeRow.className = 'flex items-start gap-3 fade-in';
