@@ -47,6 +47,16 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+  <script>
+  // Force all links to open in a new tab + be safe
+  DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+    if (node.tagName && node.tagName.toLowerCase() === 'a') {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+      node.classList.add('text-blue-600', 'hover:underline'); // Tailwind styling
+    }
+  });
+  </script>
 
   <!-- =========================
        PAGE-SPECIFIC STYLES
@@ -73,6 +83,15 @@
     .nice-scroll::-webkit-scrollbar { width: 10px; }
     .nice-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.08); border-radius: 999px; }
     .nice-scroll::-webkit-scrollbar-track { background: transparent; }
+
+    /* Style bot message links */
+    .prose-like a {
+      color: #2563eb; /* Tailwind's blue-600 */
+      text-decoration: underline;
+    }
+    .prose-like a:hover {
+      color: #1d4ed8; /* Tailwind's blue-700 */
+    }
   </style>
 </head>
 <body class="bg-brand-50 text-zinc-900 selection:bg-brand-200">
