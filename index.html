@@ -1,260 +1,149 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FY Chat – Test Demo</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#fcf7f2',
-              100: '#f6ebe0',
-              200: '#ead3bd',
-              300: '#ddb996',
-              400: '#d29f75',
-              500: '#c88f60',
-              600: '#a8744f',
-              700: '#8a5f42',
-              800: '#6b4a34',
-              900: '#513a29'
-            }
-          },
-          boxShadow: { card: '0 10px 30px rgba(0,0,0,.08)' }
-        }
+<script>
+  (function(){
+    const CHAT_API_URL = 'https://forever-young-e9031e4612f3.herokuapp.com/chat';
+
+    // --- 1) Persistent user ID via cookie ---
+    function getOrCreateFYUID() {
+      const cookieName = "fy_uid";
+      const existing = document.cookie
+        .split("; ")
+        .find(row => row.startsWith(cookieName + "="));
+
+      if (existing) {
+        return existing.split("=")[1];
+      } else {
+        const uid = "web_" + crypto.randomUUID();
+        document.cookie = `${cookieName}=${uid}; path=/; max-age=${60*60*24*365}; SameSite=Lax`;
+        return uid;
       }
-    };
-  </script>
+    }
+    const FY_UID = getOrCreateFYUID();
+    console.log("FY UID:", FY_UID);
 
-  <!-- Markdown + Highlighting + Sanitization -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('input');
+    const form = document.getElementById('composer');
+    const sendBtn = document.getElementById('send');
+    const errorBar = document.getElementById('errorBar');
+    const clearBtn = document.getElementById('clearChatBtn');
 
-  <style>
-    .fade-in { animation: fade .25s ease both; }
-    @keyframes fade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
-
-    .bubble { position: relative; }
-    .bubble.user:after { content: ''; position: absolute; left: -6px; bottom: 8px; border-width: 8px 8px 8px 0; border-style: solid; border-color: transparent rgb(200 143 96) transparent transparent; }
-    .bubble.bot:after  { content: ''; position: absolute; right: -6px; bottom: 8px; border-width: 8px 0 8px 8px; border-style: solid; border-color: transparent transparent transparent rgb(246,242,238); }
-
-    .typing { display: inline-flex; gap: 4px; }
-    .typing span { width: 6px; height: 6px; border-radius: 9999px; background: #a3a3a3; opacity: .5; animation: blink 1.2s infinite; }
-    .typing span:nth-child(2){ animation-delay: .2s }
-    .typing span:nth-child(3){ animation-delay: .4s }
-    @keyframes blink { 0%, 80%, 100% { opacity: .2 } 40% { opacity: 1 } }
-
-    .prose-like p { margin: .4rem 0; }
-    .prose-like code { background: rgba(0,0,0,.05); padding: .1rem .3rem; border-radius: .25rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .prose-like pre { white-space: pre-wrap; background: #0f172a; color: #e2e8f0; padding: .75rem; border-radius: .5rem; overflow-x: auto; font-size: .9rem; }
-    .prose-like ul { list-style: disc; padding-left: 1.25rem; }
-
-    .nice-scroll::-webkit-scrollbar { width: 10px; }
-    .nice-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.08); border-radius: 999px; }
-    .nice-scroll::-webkit-scrollbar-track { background: transparent; }
-  </style>
-</head>
-<body class="bg-brand-50 text-zinc-900 selection:bg-brand-200">
-  <div class="min-h-dvh flex flex-col">
-    <header class="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-brand-100">
-      <div class="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
-        <div class="h-9 w-9 rounded-xl bg-brand-500/10 grid place-items-center" aria-hidden="true">
-          <!-- Stethoscope icon -->
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 3v4a4 4 0 0 0 8 0V3"/>
-            <path d="M6 7a6 6 0 0 0 12 0"/>
-            <circle cx="19" cy="14" r="2"/>
-            <path d="M19 16v2a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5v-3"/>
-          </svg>
-        </div>
-        <div class="flex-1">
-          <h1 class="text-lg font-semibold leading-tight">Hello, I’m Fy</h1>
-          <p class="text-sm text-zinc-600">Your intelligent demo assistant</p>
-        </div>
-        <!-- Clear Chat Button -->
-        <button id="clearChatBtn" class="px-3 py-2 rounded-xl border border-brand-200 text-sm hover:bg-brand-100 transition flex items-center gap-2" aria-label="Clear chat">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-          Clear
-        </button>
-      </div>
-    </header>
-
-    <main class="flex-1">
-      <div class="mx-auto max-w-3xl px-3 sm:px-4 pt-3 pb-24">
-        <div class="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
-          <div id="errorBar" class="hidden bg-red-50 text-red-700 px-4 py-2 text-sm">Error connecting. Please try again.</div>
-
-          <!-- Chat Messages -->
-          <div id="chat" class="nice-scroll max-h-[70svh] overflow-y-auto p-3 sm:p-4 flex flex-col gap-3" role="log" aria-live="polite" aria-relevant="additions">
-            <div class="flex items-start gap-3 fade-in">
-              <div class="h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0">
-                <!-- Bot avatar -->
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 7v10M7 12h10"/></svg>
-              </div>
-              <div class="bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm prose-like">
-                <p>Hi! I’m your Forever Young AI assistant. How can I help you today?</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Chat Input -->
-          <form id="composer" class="border-t border-brand-100 p-2 sm:p-3 bg-white flex items-end gap-2" autocomplete="off" novalidate>
-            <textarea id="input" rows="1" placeholder="Type a message…" aria-label="Type a message" class="flex-1 resize-none outline-none rounded-xl border border-brand-200 px-3 py-2.5 bg-white focus:ring-4 focus:ring-brand-200/60 focus:border-brand-400 placeholder:text-zinc-400"></textarea>
-            <button id="send" type="submit" class="rounded-xl bg-brand-500 text-white px-4 py-2.5 text-sm font-medium hover:bg-brand-600 active:scale-[.99] shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
-          </form>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <script>
-    (function(){
-      const CHAT_API_URL = 'https://forever-young-e9031e4612f3.herokuapp.com/chat';
-      const chat = document.getElementById('chat');
-      const input = document.getElementById('input');
-      const form = document.getElementById('composer');
-      const sendBtn = document.getElementById('send');
-      const errorBar = document.getElementById('errorBar');
-      const clearBtn = document.getElementById('clearChatBtn');
-
-      // Configure marked + highlight.js
-      marked.setOptions({
-        gfm: true,
-        breaks: true,      // single newlines -> <br>
-        headerIds: false,
-        mangle: false,
-        highlight: function(code, lang) {
-          try {
-            const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
-            return hljs.highlight(code, { language }).value;
-          } catch (e) {
-            return hljs.highlight(code, { language: 'plaintext' }).value;
-          }
-        }
-      });
-
-      // Render Markdown safely
-      function renderMarkdown(text){
-        const html = marked.parse(text || '');
-        // Sanitize rendered HTML to prevent XSS from model/user content
-        const safe = DOMPurify.sanitize(html, {
-          RETURN_TRUSTED_TYPE: false
-        });
-        return safe;
-      }
-
-      // autosize textarea
-      function autosize(){ input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; }
-      input.addEventListener('input', autosize); autosize();
-
-      function scrollToBottom(){ chat.scrollTop = chat.scrollHeight; }
-
-      // icons
-      function botAvatar(){ return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 7v10M7 12h10"/></svg>'; }
-      function userAvatar(){ return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>'; }
-
-      // message elements
-      function messageRow(role){
-        const row = document.createElement('div');
-        row.className = role==='user' ? 'flex items-start gap-3 fade-in justify-end' : 'flex items-start gap-3 fade-in';
-        const avatar = document.createElement('div');
-        avatar.className = 'h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0';
-        avatar.innerHTML = role === 'user' ? userAvatar() : botAvatar();
-        const bubble = document.createElement('div');
-        bubble.className = role==='user'
-          ? 'bubble user bg-brand-500 text-white rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm max-w-[85%] sm:max-w-[75%]'
-          : 'bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm max-w-[85%] sm:max-w-[75%] prose-like';
-        if(role==='user'){ row.appendChild(bubble); row.appendChild(avatar); }
-        else { row.appendChild(avatar); row.appendChild(bubble); }
-        return {row, bubble};
-      }
-
-      function addMessage(role, text){
-        const {row, bubble} = messageRow(role);
-        const inner = document.createElement('div');
-        inner.setAttribute('data-html','');
-        inner.innerHTML = renderMarkdown(text);
-        bubble.appendChild(inner);
-        chat.appendChild(row);
-        return bubble;
-      }
-
-      function addTyping(){
-        const {row, bubble} = messageRow('bot');
-        const inner = document.createElement('div');
-        inner.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
-        bubble.appendChild(inner);
-        chat.appendChild(row);
-        return {row, bubble};
-      }
-
-      async function sendMessage(text){
-        hideError();
-        addMessage('user', text);
-        scrollToBottom();
-        const typing = addTyping();
-        scrollToBottom();
+    // Configure marked + highlight.js
+    marked.setOptions({
+      gfm: true,
+      breaks: true,
+      headerIds: false,
+      mangle: false,
+      highlight: function(code, lang) {
         try {
-          const res = await fetch(CHAT_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-          });
-          const contentType = res.headers.get('content-type') || '';
-          const bodyText = await res.text();
-          if (!res.ok) throw new Error(`Server ${res.status} — ${bodyText.slice(0,160)}`);
-          if (!contentType.includes('application/json')) throw new Error(`Expected JSON, got ${contentType} — ${bodyText.slice(0,160)}`);
-          const data = JSON.parse(bodyText);
-          const reply = (data && data.reply) || '';
-          typing.bubble.innerHTML = '';
-          const inner = document.createElement('div');
-          inner.setAttribute('data-html','');
-          inner.innerHTML = renderMarkdown(reply);
-          typing.bubble.appendChild(inner);
-        } catch (err){
-          typing.row.remove();
-          showError(err && err.message ? err.message : 'Network error');
-        } finally {
-          scrollToBottom();
+          const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+          return hljs.highlight(code, { language }).value;
+        } catch (e) {
+          return hljs.highlight(code, { language: 'plaintext' }).value;
         }
       }
+    });
 
-      function showError(msg){ errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
-      function hideError(){ errorBar.classList.add('hidden'); }
+    function renderMarkdown(text){
+      const html = marked.parse(text || '');
+      return DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false });
+    }
 
-      // clear chat
-      if (clearBtn) {
-        clearBtn.addEventListener('click', ()=>{
-          chat.innerHTML = '';
-          const welcomeRow = document.createElement('div');
-          welcomeRow.className = 'flex items-start gap-3 fade-in';
-          welcomeRow.innerHTML = `<div class="h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0">${botAvatar()}</div><div class="bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm prose-like"><p>Hi! I’m your Forever Young AI assistant. How can I help you today?</p></div>`;
-          chat.appendChild(welcomeRow);
+    function autosize(){ input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; }
+    input.addEventListener('input', autosize); autosize();
+
+    function scrollToBottom(){ chat.scrollTop = chat.scrollHeight; }
+
+    function botAvatar(){ return '<svg ...>...</svg>'; } // shortened for clarity
+    function userAvatar(){ return '<svg ...>...</svg>'; }
+
+    function messageRow(role){
+      const row = document.createElement('div');
+      row.className = role==='user' ? 'flex items-start gap-3 fade-in justify-end' : 'flex items-start gap-3 fade-in';
+      const avatar = document.createElement('div');
+      avatar.className = 'h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0';
+      avatar.innerHTML = role === 'user' ? userAvatar() : botAvatar();
+      const bubble = document.createElement('div');
+      bubble.className = role==='user'
+        ? 'bubble user bg-brand-500 text-white rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm max-w-[85%] sm:max-w-[75%]'
+        : 'bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm max-w-[85%] sm:max-w-[75%] prose-like';
+      if(role==='user'){ row.appendChild(bubble); row.appendChild(avatar); }
+      else { row.appendChild(avatar); row.appendChild(bubble); }
+      return {row, bubble};
+    }
+
+    function addMessage(role, text){
+      const {row, bubble} = messageRow(role);
+      const inner = document.createElement('div');
+      inner.setAttribute('data-html','');
+      inner.innerHTML = renderMarkdown(text);
+      bubble.appendChild(inner);
+      chat.appendChild(row);
+      return bubble;
+    }
+
+    function addTyping(){
+      const {row, bubble} = messageRow('bot');
+      bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+      chat.appendChild(row);
+      return {row, bubble};
+    }
+
+    async function sendMessage(text){
+      hideError();
+      addMessage('user', text);
+      scrollToBottom();
+      const typing = addTyping();
+      scrollToBottom();
+      try {
+        const res = await fetch(CHAT_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            user_id: FY_UID // <-- Send persistent ID
+          })
         });
+        const contentType = res.headers.get('content-type') || '';
+        const bodyText = await res.text();
+        if (!res.ok) throw new Error(`Server ${res.status} — ${bodyText.slice(0,160)}`);
+        if (!contentType.includes('application/json')) throw new Error(`Expected JSON, got ${contentType} — ${bodyText.slice(0,160)}`);
+        const data = JSON.parse(bodyText);
+        const reply = (data && data.reply) || '';
+        typing.bubble.innerHTML = renderMarkdown(reply);
+      } catch (err){
+        typing.row.remove();
+        showError(err?.message || 'Network error');
+      } finally {
+        scrollToBottom();
       }
+    }
 
-      // submit handlers
-      form.addEventListener('submit', (e)=>{
+    function showError(msg){ errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function hideError(){ errorBar.classList.add('hidden'); }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', ()=>{
+        chat.innerHTML = '';
+        const welcomeRow = document.createElement('div');
+        welcomeRow.className = 'flex items-start gap-3 fade-in';
+        welcomeRow.innerHTML = `<div class="h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0">${botAvatar()}</div><div class="bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm prose-like"><p>Hi! I’m your Forever Young AI assistant. How can I help you today?</p></div>`;
+        chat.appendChild(welcomeRow);
+      });
+    }
+
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const text = (input.value || '').trim();
+      if(!text) return;
+      sendBtn.disabled = true;
+      sendMessage(text).finally(()=>{ sendBtn.disabled = false; });
+      input.value=''; autosize(); input.focus();
+    });
+    input.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter' && !e.shiftKey){
         e.preventDefault();
-        const text = (input.value || '').trim();
-        if(!text) return;
-        sendBtn.disabled = true;
-        sendMessage(text).finally(()=>{ sendBtn.disabled = false; });
-        input.value=''; autosize(); input.focus();
-      });
-      input.addEventListener('keydown', (e)=>{
-        if(e.key==='Enter' && !e.shiftKey){
-          e.preventDefault();
-          form.requestSubmit();
-        }
-      });
-    })();
-  </script>
-</body>
-</html>
+        form.requestSubmit();
+      }
+    });
+  })();
+</script>
