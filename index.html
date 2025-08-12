@@ -1,9 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- =========================
+       META & TITLE
+  ========================== -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FY Chat – Test Demo</title>
+
+  <!-- =========================
+       TAILWIND SETUP
+  ========================== -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -29,6 +36,21 @@
       }
     };
   </script>
+
+  <!-- =========================
+       THIRD-PARTY LIBRARIES
+       - Markdown parser (marked)
+       - Syntax highlighter (highlight.js)
+       - Sanitizer (DOMPurify)
+  ========================== -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+
+  <!-- =========================
+       PAGE-SPECIFIC STYLES
+  ========================== -->
   <style>
     .fade-in { animation: fade .25s ease both; }
     @keyframes fade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
@@ -54,6 +76,9 @@
   </style>
 </head>
 <body class="bg-brand-50 text-zinc-900 selection:bg-brand-200">
+  <!-- =========================
+       HEADER
+  ========================== -->
   <div class="min-h-dvh flex flex-col">
     <header class="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-brand-100">
       <div class="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
@@ -78,12 +103,16 @@
       </div>
     </header>
 
+    <!-- =========================
+         MAIN CONTENT
+    ========================== -->
     <main class="flex-1">
       <div class="mx-auto max-w-3xl px-3 sm:px-4 pt-3 pb-24">
         <div class="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
+          <!-- Error bar -->
           <div id="errorBar" class="hidden bg-red-50 text-red-700 px-4 py-2 text-sm">Error connecting. Please try again.</div>
 
-          <!-- Chat Messages -->
+          <!-- Chat messages container -->
           <div id="chat" class="nice-scroll max-h-[70svh] overflow-y-auto p-3 sm:p-4 flex flex-col gap-3" role="log" aria-live="polite" aria-relevant="additions">
             <div class="flex items-start gap-3 fade-in">
               <div class="h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0">
@@ -96,7 +125,7 @@
             </div>
           </div>
 
-          <!-- Chat Input -->
+          <!-- Composer -->
           <form id="composer" class="border-t border-brand-100 p-2 sm:p-3 bg-white flex items-end gap-2" autocomplete="off" novalidate>
             <textarea id="input" rows="1" placeholder="Type a message…" aria-label="Type a message" class="flex-1 resize-none outline-none rounded-xl border border-brand-200 px-3 py-2.5 bg-white focus:ring-4 focus:ring-brand-200/60 focus:border-brand-400 placeholder:text-zinc-400"></textarea>
             <button id="send" type="submit" class="rounded-xl bg-brand-500 text-white px-4 py-2.5 text-sm font-medium hover:bg-brand-600 active:scale-[.99] shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
@@ -106,8 +135,14 @@
     </main>
   </div>
 
+  <!-- =========================
+       APP SCRIPT
+  ========================== -->
   <script>
     (function(){
+      /* -------------------------
+         CONFIG / DOM HOOKS
+      -------------------------- */
       const CHAT_API_URL = 'https://forever-young-e9031e4612f3.herokuapp.com/chat';
       const chat = document.getElementById('chat');
       const input = document.getElementById('input');
@@ -116,38 +151,48 @@
       const errorBar = document.getElementById('errorBar');
       const clearBtn = document.getElementById('clearChatBtn');
 
-      // autosize textarea
+      /* -------------------------
+         MARKED + HLJS CONFIG
+      -------------------------- */
+      marked.setOptions({
+        gfm: true,
+        breaks: true,      // single newlines -> <br>
+        headerIds: false,
+        mangle: false,
+        highlight: function(code, lang) {
+          try {
+            const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+            return hljs.highlight(code, { language }).value;
+          } catch (e) {
+            return hljs.highlight(code, { language: 'plaintext' }).value;
+          }
+        }
+      });
+
+      // Safely render Markdown (normalize bullets like "• " to "- ")
+      function renderMarkdown(text){
+        const normalized = (text || "")
+          .replace(/^\s*•\s+/gm, "- ")
+          .replace(/^\s*[–—]\s+/gm, "- ");
+        const html = marked.parse(normalized);
+        const safe = DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false });
+        return safe;
+      }
+
+      /* -------------------------
+         UI HELPERS
+      -------------------------- */
       function autosize(){ input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; }
       input.addEventListener('input', autosize); autosize();
-
-      // basic markdown-ish rendering
-      function renderText(s){
-        // ```code``` blocks
-        s = s.replace(/```([\s\S]*?)```/g, (_, code) => '<pre>'+escapeHtml(code.trim())+'</pre>');
-        // inline `code`
-        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-        // simple bullets
-        s = s.replace(/\n-\s/g, '\n• ');
-        // paragraphs
-        return s.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g,'<br/>')}</p>`).join('');
-      }
-      function escapeHtml(str){
-        return str.replace(/[&<>"']/g, (m) => ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        })[m]);
-      }
-
       function scrollToBottom(){ chat.scrollTop = chat.scrollHeight; }
 
-      // icons
-      function botAvatar(){ return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 7v10M7 12h10"/></svg>'; }
-      function userAvatar(){ return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>'; }
+      function botAvatar(){
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 7v10M7 12h10"/></svg>';
+      }
+      function userAvatar(){
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 text-brand-700" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>';
+      }
 
-      // message elements
       function messageRow(role){
         const row = document.createElement('div');
         row.className = role==='user' ? 'flex items-start gap-3 fade-in justify-end' : 'flex items-start gap-3 fade-in';
@@ -163,11 +208,11 @@
         return {row, bubble};
       }
 
-      function addMessage(role, html){
+      function addMessage(role, text){
         const {row, bubble} = messageRow(role);
         const inner = document.createElement('div');
         inner.setAttribute('data-html','');
-        inner.innerHTML = renderText(escapeHtml(html));
+        inner.innerHTML = renderMarkdown(text);
         bubble.appendChild(inner);
         chat.appendChild(row);
         return bubble;
@@ -182,12 +227,20 @@
         return {row, bubble};
       }
 
+      function showError(msg){ errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+      function hideError(){ errorBar.classList.add('hidden'); }
+
+      /* -------------------------
+         NETWORK: SEND MESSAGE
+      -------------------------- */
       async function sendMessage(text){
         hideError();
         addMessage('user', text);
         scrollToBottom();
+
         const typing = addTyping();
         scrollToBottom();
+
         try {
           const res = await fetch(CHAT_API_URL, {
             method: 'POST',
@@ -195,20 +248,22 @@
             body: JSON.stringify({
               role: 'user',
               message: text,
-              user_id: 'web_test_id', 
+              user_id: 'web_test_id',
               name: 'test_user_name'
             })
           });
+
           const contentType = res.headers.get('content-type') || '';
           const bodyText = await res.text();
           if (!res.ok) throw new Error(`Server ${res.status} — ${bodyText.slice(0,160)}`);
           if (!contentType.includes('application/json')) throw new Error(`Expected JSON, got ${contentType} — ${bodyText.slice(0,160)}`);
+
           const data = JSON.parse(bodyText);
           const reply = (data && data.reply) || '';
           typing.bubble.innerHTML = '';
           const inner = document.createElement('div');
           inner.setAttribute('data-html','');
-          inner.innerHTML = renderText(escapeHtml(reply));
+          inner.innerHTML = renderMarkdown(reply);
           typing.bubble.appendChild(inner);
         } catch (err){
           typing.row.remove();
@@ -218,21 +273,24 @@
         }
       }
 
-      function showError(msg){ errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
-      function hideError(){ errorBar.classList.add('hidden'); }
-
-      // clear chat
+      /* -------------------------
+         EVENT HANDLERS
+      -------------------------- */
+      // Clear chat
       if (clearBtn) {
         clearBtn.addEventListener('click', ()=>{
           chat.innerHTML = '';
           const welcomeRow = document.createElement('div');
           welcomeRow.className = 'flex items-start gap-3 fade-in';
-          welcomeRow.innerHTML = `<div class="h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0">${botAvatar()}</div><div class="bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm prose-like"><p>Hi! I’m your Forever Young AI assistant. How can I help you today?</p></div>`;
+          welcomeRow.innerHTML = `<div class="h-8 w-8 rounded-full bg-brand-500/10 grid place-items-center shrink-0">${botAvatar()}</div>
+            <div class="bubble bot bg-[rgb(246,242,238)] rounded-2xl px-4 py-2 text-[15px] leading-relaxed shadow-sm prose-like">
+              <p>Hi! I’m your Forever Young AI assistant. How can I help you today?</p>
+            </div>`;
           chat.appendChild(welcomeRow);
         });
       }
 
-      // submit handlers
+      // Submit
       form.addEventListener('submit', (e)=>{
         e.preventDefault();
         const text = (input.value || '').trim();
@@ -241,6 +299,8 @@
         sendMessage(text).finally(()=>{ sendBtn.disabled = false; });
         input.value=''; autosize(); input.focus();
       });
+
+      // Enter to send (Shift+Enter for newline)
       input.addEventListener('keydown', (e)=>{
         if(e.key==='Enter' && !e.shiftKey){
           e.preventDefault();
