@@ -283,8 +283,7 @@
             body: JSON.stringify({
               role: 'user',
               message: text,
-              user_id: FY_UID,     // stable across visits
-              session_id: FY_SID,  // new each load / on clear
+              user_id: FY_SID,     // stable across visits
               name: 'test_user_name'
             })
           });
