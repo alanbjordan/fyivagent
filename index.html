@@ -90,6 +90,25 @@
       text-decoration: underline;
     }
     .prose-like a:hover { color: #1d4ed8; /* blue-700 */ }
+
+    /* Keep long URLs/text inside the bubble on mobile */
+    .prose-like {
+      overflow-wrap: anywhere;     /* modern, works well on iOS Safari */
+      word-wrap: break-word;       /* legacy alias for extra safety */
+      word-break: break-word;      /* WebKit-friendly */
+    }
+    
+    .prose-like a {
+      overflow-wrap: anywhere;
+      word-break: break-all;       /* really aggressive for long URLs */
+      display: inline;             /* ensure normal inline flow */
+    }
+    
+    /* Just in case, prevent horizontal scroll inside bubbles */
+    .bubble {
+      overflow-x: hidden;
+    }
+
   </style>
 </head>
 <body class="bg-brand-50 text-zinc-900 selection:bg-brand-200">
