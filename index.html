@@ -194,8 +194,8 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               message: text,
-              user_id: 'web_test', 
-              name: null
+              user_id: 'web_test_id', 
+              name: 'test_user_name'
             })
           });
           const contentType = res.headers.get('content-type') || '';
